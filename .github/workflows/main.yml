@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Qual a Cor da Nota? | Starkids Music</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Lobster&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <img src="starkids_logo.png" alt="" id="game-logo">
+        
+        <h1>Qual a Cor da Nota?</h1>
+        <p id="score-text">Pontuação: 0</p>
+    </header>
+
+    <main>
+        <div id="note-display-area">
+            <h2 id="current-note">DÓ</h2>
+        </div>
+        
+        <canvas id="piano-canvas" width="600" height="200"></canvas>
+        
+        <div id="color-options" class="options-grid">
+            </div>
+
+        <div id="feedback-area">
+            <p id="feedback-message"></p>
+            <button id="next-note-button">Próxima Nota</button>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
