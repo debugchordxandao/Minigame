@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calibrador de Desenho Livre</title>
+    <style>
+        body { font-family: 'Arial', sans-serif; text-align: center; margin: 20px; }
+        #output { 
+            margin-top: 20px; 
+            padding: 10px; 
+            background-color: #f4f4f4; 
+            border: 1px solid #ccc; 
+            white-space: pre-wrap; 
+            text-align: left;
+            min-height: 100px;
+        }
+        #instructions {
+            background-color: #ffe0b2; /* Laranja suave */
+            border: 1px solid #ff9800;
+            padding: 15px;
+            margin-bottom: 10px;
+            text-align: left;
+            font-weight: bold;
+        }
+        canvas { 
+            border: 2px solid red; 
+            cursor: pointer; /* Mude para cursor de mão */
+            display: block;
+            margin: 0 auto;
+        }
+        #controls { margin: 15px 0; font-size: 1.1em; }
+        #keyDisplay { font-weight: bold; font-size: 1.5em; color: #ff9800; }
+        .success { color: green; }
+        .warning { color: orange; }
+    </style>
+</head>
+<body>
+
+    <h2>🎹 Calibrador de Geometria (Desenho Livre)</h2>
+
+    <div id="instructions">
+        <h3>Instruções de Medição Dinâmica:</h3>
+        <p>1. Pressione a tecla **ESPAÇO** para limpar o desenho atual.</p>
+        <p>2. Pressione e **SEGURE o botão do mouse** e arraste para desenhar o contorno exato da tecla atual.</p>
+        <p>3. Solte o mouse. O contorno será gerado.</p>
+        <p>4. Use a **seta →** para salvar e avançar para a próxima tecla (Key 1: RÉ).</p>
+        <p>⚠️ **Dica:** Comece a desenhar na base da tecla e circule o contorno. Desenhe apenas a área da tecla branca.</p>
+    </div>
+
+    <div id="controls">
+        <span id="keyDisplay">Key 0: DÓ</span> (Vértices: <span id="vertexCount">0</span>)
+    </div>
+    
+    <canvas id="pianoCanvas" width="600" height="200"></canvas>
+
+    <h3>Resultado Final (Copie este array quando Key 6 estiver concluída):</h3>
+    <div id="output">...</div>
+
+    <script>
+        const KEY_NAMES = ["DÓ", "RÉ", "MI", "FÁ", "SOL", "LÁ", "SI"];
+        const canvas = document.getElementById('pianoCanvas');
+        const ctx = canvas.getContext('2d');
+        const outputDiv = document.getElementById('output');
+        const keyDisplay = document.getElementById('keyDisplay');
+        const vertexCountSpan = document.getElementById('vertexCount');
+        const pianoImage = new Image();
+        pianoImage.src = 'piano_base.png';
+        
+        // --- Variáveis de Estado ---
+        let currentKeyIndex = 0;
+        let currentVertices = [];
+        let finalVerticesData = new Array(7).fill(null);
+        let isDrawing = false;
+        const SIMPLIFICATION_FACTOR = 3; // Registra 1 ponto a cada 3 pixels movidos
+
+        // --- Funções de Desenho e Exibição ---
+
+        function updateCanvas() {
+            // Desenha a imagem base
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (pianoImage.complete) {
+                ctx.drawImage(pianoImage, 0, 0, canvas.width, canvas.height);
+            } else {
+                ctx.fillStyle = '#f00';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            // Desenha o contorno atual
+            if (currentVertices.length > 1) {
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(currentVertices[0][0], currentVertices[0][1]);
+                currentVertices.forEach(([x, y]) => {
+                    ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            }
+
+            // Destaca a tecla salva
+            if (finalVerticesData[currentKeyIndex]) {
+                ctx.fillStyle = 'rgba(0, 200, 0, 0.2)'; 
+                ctx.fillRect(currentKeyIndex * (600/7), 0, 600/7, 200);
+            }
+        }
+
+        function updateDisplay() {
+            const keyName = KEY_NAMES[currentKeyIndex];
+            keyDisplay.textContent = `Key ${currentKeyIndex}: ${keyName}`;
+            
+            let status = 'Desenhe a tecla';
+            if (finalVerticesData[currentKeyIndex]) {
+                status = 'SALVA';
+                keyDisplay.className = 'success';
+            } else if (currentVertices.length > 0) {
+                status = 'DESENHANDO...';
+                keyDisplay.className = 'warning';
+            } else {
+                 keyDisplay.className = '';
+            }
+            keyDisplay.textContent += ` (${status})`;
+
+            vertexCountSpan.textContent = currentVertices.length;
+            
+            // --- Saída Final ---
+            const dataToCopy = finalVerticesData
+                .map((arr, i) => arr ? `Key ${i} (${KEY_NAMES[i]}): ${JSON.stringify(arr)}` : `Key ${i} (${KEY_NAMES[i]}): NÃO MEDIDA`);
+            
+            outputDiv.textContent = '[\n' + dataToCopy.join(',\n') + '\n]';
+            
+            updateCanvas();
+        }
+
+        // --- Lógica de Medição Dinâmica ---
+
+        function getMousePos(canvas, event) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: Math.round(event.clientX - rect.left),
+                y: Math.round(event.clientY - rect.top)
+            };
+        }
+
+        canvas.addEventListener('mousedown', (event) => {
+            currentVertices = []; // Começa um novo traço
+            isDrawing = true;
+            const pos = getMousePos(canvas, event);
+            currentVertices.push([pos.x, pos.y]);
+            updateDisplay();
+        });
+
+        canvas.addEventListener('mousemove', (event) => {
+            if (!isDrawing) return;
+            const pos = getMousePos(canvas, event);
+            
+            // Simplifica o traço para não registrar milhares de pontos
+            if (currentVertices.length === 0 || 
+                Math.abs(pos.x - currentVertices[currentVertices.length - 1][0]) > SIMPLIFICATION_FACTOR ||
+                Math.abs(pos.y - currentVertices[currentVertices.length - 1][1]) > SIMPLIFICATION_FACTOR) 
+            {
+                currentVertices.push([pos.x, pos.y]);
+                updateCanvas();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (isDrawing && currentVertices.length > 1) {
+                // Adiciona o ponto final para fechar o traço
+                currentVertices.push(currentVertices[0]); 
+            }
+            isDrawing = false;
+            updateDisplay();
+        });
+
+
+        // --- Lógica de Navegação por Teclado ---
+
+        window.addEventListener('keydown', (event) => {
+            if (event.code === 'ArrowRight' || event.code === 'ArrowLeft') {
+                event.preventDefault();
+                const direction = event.code === 'ArrowRight' ? 1 : -1;
+                saveAndChangeKey(direction);
+            } else if (event.code === 'Space') {
+                event.preventDefault();
+                // Limpa o array da tecla atual
+                currentVertices = [];
+                updateDisplay();
+            }
+        });
+
+        function saveAndChangeKey(direction) {
+            // 1. Salva a medição atual (apenas se houver cliques)
+            if (currentVertices.length > 1) {
+                finalVerticesData[currentKeyIndex] = currentVertices;
+                console.log(`Key ${currentKeyIndex} (${KEY_NAMES[currentKeyIndex]}) SALVA com ${currentVertices.length} vértices.`);
+            }
+
+            // 2. Calcula novo índice
+            let newIndex = currentKeyIndex + direction;
+            if (newIndex < 0) newIndex = 0;
+            if (newIndex > 6) newIndex = 6;
+
+            // 3. Carrega os dados do novo índice
+            currentKeyIndex = newIndex;
+            currentVertices = finalVerticesData[currentKeyIndex] || [];
+            
+            updateDisplay();
+        }
+
+        // --- Inicialização ---
+
+        pianoImage.onload = () => {
+            updateDisplay();
+            console.log("Sistema de calibração pronto. Use as setas para navegar.");
+        };
+
+        pianoImage.onerror = () => {
+            console.error("ERRO: piano_base.png não encontrado. A calibração não pode ser iniciada.");
+            keyDisplay.textContent = "ERRO: IMAGEM BASE FALTANDO.";
+        };
+
+        // Carrega a imagem ou exibe erro
+        updateCanvas();
+    </script>
+</body>
+</html>
